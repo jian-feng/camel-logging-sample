@@ -7,22 +7,26 @@
 
 このサンプルプロジェクトでは、Camel(Fuse)のロギング機能をデモします。
 
-- `logコンポーネント` でCamel Route内でログ出力
-- `Fuseロギング` でログ出力のカスタマイズ
-- `マスキング付きロギング` の実現方法
+- Camel Route内でログ出力
+- Processor内でログ出力
+- ログ出力のカスタマイズ
+- マスキング付きロギング
+- サンプルの実行方法
 
-== Step 1: logコンポーネントの呼出
+== Camel Route内でログ出力
 
 個々のCamelルート内でlogコンポーネントを呼出します。
 Logコンポーネントのオプションで明示にカスタムロガー(例: `rest-request-audit`)を指定します。
 
 下記の `<to id="rest-request-audit" ...` の記述部を参照してください。
+`src/main/resources/OSGI-INF/blueprint/blueprint.xml`
 ```xml
 <!-- Normal Logic of CamelRoute -->
 <route id="route_businesslogic" streamCache="true">
-    <from id="direct_demo" uri="direct:businesslogic"/>
-    <to id="rest-request-audit" uri="log:rest-request-audit?multiline=true&amp;showAll=true&amp;showStreams=true&amp;skipBodyLineSeparator=false"/>
-    <process id="inboundProc" ref="inboundProcessor"/>
+    <from .../>
+    <to uri="log:rest-request-audit?multiline=true&amp;showAll=true&amp;showStreams=true&amp;skipBodyLineSeparator=false"/>
+    <log logName="rest-request-audit" message="${body}"/>
+    <... />
 </route>
 ```
 
@@ -36,18 +40,61 @@ Logコンポーネントのオプションで明示にカスタムロガー(例:
 showStreams=trueのオプションを指定した場合、メッセージBodyのStreamが一度読み込んだ後、後続処理が再度読み込めなくなります。その為、route要素にてstreamCacheを有効化する必要があります。 +
 　例: `<route id="..." streamCache="true">``
 
+== Processor内でログ出力
 
-サンプルCamelルートのデプロイは以下のコマンドを実行してください。
-```sh
-features:install camel-jackson
-features:install camel-jetty
-osgi:install -s mvn:com.sample/camel-logging-sample/1.0.0
+LoggerFactory.getLoggerでロガーを取得して、audit_log.info()で出力します。
+`src/main/java/com/sample/logging/InboundProcessor.java`
+```java
+public class InboundProcessor implements Processor {
+
+	private static final Logger audit_log = LoggerFactory.getLogger("rest-request-audit");
+
+	public void init() {
+		audit_log.info(InboundProcessor.class + " is initialized.");
+	}
+```
+
+== ログ出力のカスタマイズ
+
+    設定ファイル: src/main/resources/log4j.properties
+
+1. カスタムロガーの定義
+2. ルートロガーからカスタムロガーの2重出力を除外(log4j.additivity...=false)
+3. カスタムロガーのレイアウト(...layout=PatternLayout)
+4. その他(出力先、ローテーションなど)
+
+```properties
+#######################################
+# define rest-request-audit logger
+#######################################
+log4j.logger.rest-request-audit=INFO, rest-request-audit
+# prevent rest-request-audit logger output to rootLogger
+log4j.additivity.rest-request-audit=false
+
+# rest-request-audit appender
+log4j.appender.rest-request-audit=org.apache.log4j.RollingFileAppender
+log4j.appender.rest-request-audit.layout=org.apache.log4j.PatternLayout
+log4j.appender.rest-request-audit.layout.ConversionPattern=%d{ABSOLUTE} | %-5.5p | %-16.16t | %-32.32c{1} | %X{bundle.id} - %X{bundle.name} - %X{bundle.version} | %m%n
+log4j.appender.rest-request-audit.file=target/rest-request-audit.log
+log4j.appender.rest-request-audit.append=true
+log4j.appender.rest-request-audit.maxFileSize=10MB
+log4j.appender.rest-request-audit.maxBackupIndex=10
+#
+#######################################
 ```
 
 
-== Step 2: Fuseロギングの設定変更
 
-Fuseのロギング設定にてStep1で指定したカスタムロガー(例: `rest-request-audit`)のカスタマイズします。また、変更の反映するには、Fuse再起動が必要です。
+== マスキング付きロギング
+
+下記の例では、SanitizingPatternLayoutを使って、"yyyy-mm-dd"の日付情報を一律に `__MASKED_DATE__` へ置換するようなマスキングを設定します。
+
+[WARNING]
+SanitizingPatternLayout(下記3,4,5)はKaraf上のみ指定できます。
+即ち、src/main/resources/log4j.properties にて指定できません。
+
+Fuseのロギング設定にてStep1で指定したカスタムロガー(例: `rest-request-audit`)のカスタマイズします。
+また、変更の反映するには、Fuse再起動してください。
 
     設定ファイル: fuse/etc/org.ops4j.pax.logging.cfg
 
@@ -60,10 +107,11 @@ Fuseのロギング設定にてStep1で指定したカスタムロガー(例: `r
 5. マスキング後の置換文字(...layout.replacement=__MASKED_DATE__)
 6. その他(出力先、ローテーションなど)
 
+
 ```properties
-########################################
-#
+#######################################
 # define rest-request-audit logger
+#######################################
 log4j.logger.rest-request-audit=INFO, rest-request-audit
 # prevent rest-request-audit logger output to rootLogger
 log4j.additivity.rest-request-audit=false
@@ -79,17 +127,13 @@ log4j.appender.rest-request-audit.append=true
 log4j.appender.rest-request-audit.maxFileSize=10MB
 log4j.appender.rest-request-audit.maxBackupIndex=10
 #
-########################################
+#######################################
 ```
 
-上記の例では、"yyyy-mm-dd"の日付情報を一律に `__MASKED_DATE__` へ置換するように設定します。
-
-== マスキング付きロギングの出力例
-
 サンプルリクエストを発行します。
-```sh
+```console
 $ cd camel-logging-sample
-$ curl -d @request.json -H 'Content-Type:application/json' http://localhost:9002/rest/camel-logging-sample
+$ curl -X GET -d @request.json -H 'Content-Type:application/json' http://localhost:9002/rest/camel-logging-sample
 >>> {"code":"Accepted"}
 ```
 
@@ -118,4 +162,24 @@ $ curl -d @request.json -H 'Content-Type:application/json' http://localhost:9002
 
 , Out: null:
 ]
+```
+
+== サンプルの実行方法
+
+ローカルで実行の場合、
+```sh
+mvn camel:run
+```
+
+Karaf上で実行する場合、
+先にサンプルCamelルートのデプロイは以下のコマンドを実行してください。
+```sh
+features:install camel-jackson
+features:install camel-jetty
+osgi:install -s mvn:com.sample/camel-logging-sample/1.0.0
+```
+
+`curl` でテストします。
+```sh
+curl http://localhost:9002/rest/camel-logging-sample
 ```

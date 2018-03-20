@@ -17,10 +17,10 @@
 		</license>
 	</licenses>
 	<properties>
-		<camel.version>2.17.0.redhat-630254</camel.version>
+		<camel.version>2.17.0.redhat-630310</camel.version>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 		<version.maven-bundle-plugin>3.2.0</version.maven-bundle-plugin>
-		<jboss.fuse.bom.version>6.3.0.redhat-254</jboss.fuse.bom.version>
+		<jboss.fuse.bom.version>6.3.0.redhat-310</jboss.fuse.bom.version>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 	</properties>
 	<dependencyManagement>
@@ -38,23 +38,6 @@
 		<dependency>
 			<groupId>org.apache.camel</groupId>
 			<artifactId>camel-core</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.ow2.asm</groupId>
-			<artifactId>asm-all</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.camel</groupId>
-			<artifactId>camel-cxf</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.cxf</groupId>
-			<artifactId>cxf-rt-bindings-soap</artifactId>
-			<scope>provided</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.cxf</groupId>
-			<artifactId>cxf-rt-transports-http-jetty</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.camel</groupId>
@@ -84,22 +67,6 @@
 			<groupId>org.apache.camel</groupId>
 			<artifactId>camel-test-blueprint</artifactId>
 			<scope>test</scope>
-			<exclusions>
-				<exclusion>
-					<artifactId>org.apache.felix.fileinstall</artifactId>
-					<groupId>org.apache.felix</groupId>
-				</exclusion>
-			</exclusions>
-		</dependency>
-		<dependency>
-			<groupId>org.osgi</groupId>
-			<artifactId>org.osgi.core</artifactId>
-			<scope>provided</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.osgi</groupId>
-			<artifactId>org.osgi.compendium</artifactId>
-			<scope>provided</scope>
 		</dependency>
 	</dependencies>
 	<repositories>
@@ -164,11 +131,6 @@
 				<extensions>true</extensions>
 				<configuration>
 					<instructions>
-						<Import-Package>
-							org.apache.cxf.binding.soap,
-							org.apache.cxf.interceptor,
-							*
-						</Import-Package>
 						<Bundle-SymbolicName>camel-logging-sample</Bundle-SymbolicName>
 						<Bundle-Name>camel-logging-sample</Bundle-Name>
 					</instructions>

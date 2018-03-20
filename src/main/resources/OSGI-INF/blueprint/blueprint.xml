@@ -1,25 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <blueprint xmlns="http://www.osgi.org/xmlns/blueprint/v1.0.0"
-    xmlns:cxf="http://camel.apache.org/schema/blueprint/cxf"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.osgi.org/xmlns/blueprint/v1.0.0 https://www.osgi.org/xmlns/blueprint/v1.0.0/blueprint.xsd http://camel.apache.org/schema/blueprint http://camel.apache.org/schema/blueprint/camel-blueprint.xsd http://cxf.apache.org/blueprint/core http://cxf.apache.org/schemas/blueprint/core.xsd  ">
-    <bean class="com.sample.logging.InboundProcessor" id="inboundProcessor"/>
-    <camelContext id="camel-logging-sample"
-        trace="false" xmlns="http://camel.apache.org/schema/blueprint">        
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="              http://www.osgi.org/xmlns/blueprint/v1.0.0 https://www.osgi.org/xmlns/blueprint/v1.0.0/blueprint.xsd              http://camel.apache.org/schema/blueprint http://camel.apache.org/schema/blueprint/camel-blueprint.xsd">
+    <bean id="inboundProcessor" class="com.sample.logging.InboundProcessor" 
+    		init-method="init" />
+    <camelContext id="camel-logging-sample" trace="false" xmlns="http://camel.apache.org/schema/blueprint">
         <!-- ============== REST DSL ============== -->
-        <restConfiguration bindingMode="json" component="jetty"
-            host="0.0.0.0" port="9002">
-        </restConfiguration>
+        <restConfiguration bindingMode="json" component="jetty" host="0.0.0.0" port="9002"/>
         <rest id="rest1" path="/rest">
-            <post produces="application/json"
-                type="com.sample.reportincident.InputReportIncident" uri="/camel-logging-sample">
+            <get uri="/camel-logging-sample">
                 <to uri="direct:businesslogic"/>
-            </post>
+            </get>
         </rest>
         <!-- Normal Logic of CamelRoute -->
         <route id="route_businesslogic" streamCache="true">
             <from id="direct_demo" uri="direct:businesslogic"/>
             <to id="rest-request-audit" uri="log:rest-request-audit?multiline=true&amp;showAll=true&amp;showStreams=true&amp;skipBodyLineSeparator=false"/>
-            <log message="${body}"/>
+            <log id="_log1" logName="rest-request-audit" message="${body}"/>
             <process id="inboundProc" ref="inboundProcessor"/>
         </route>
     </camelContext>
