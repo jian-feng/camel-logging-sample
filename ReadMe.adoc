@@ -1,0 +1,121 @@
+:source-highlighter: pygments
+:toc:
+:sectnums:
+:icons: font
+
+== 概要
+
+このサンプルプロジェクトでは、Camel(Fuse)のロギング機能をデモします。
+
+- `logコンポーネント` でCamel Route内でログ出力
+- `Fuseロギング` でログ出力のカスタマイズ
+- `マスキング付きロギング` の実現方法
+
+== Step 1: logコンポーネントの呼出
+
+個々のCamelルート内でlogコンポーネントを呼出します。
+Logコンポーネントのオプションで明示にカスタムロガー(例: `rest-request-audit`)を指定します。
+
+下記の `<to id="rest-request-audit" ...` の記述部を参照してください。
+```xml
+<!-- Normal Logic of CamelRoute -->
+<route id="route_businesslogic" streamCache="true">
+    <from id="direct_demo" uri="direct:businesslogic"/>
+    <to id="rest-request-audit" uri="log:rest-request-audit?multiline=true&amp;showAll=true&amp;showStreams=true&amp;skipBodyLineSeparator=false"/>
+    <process id="inboundProc" ref="inboundProcessor"/>
+</route>
+```
+
+-- rest-request-audit:: カスタムロガー名、後述のFuseロギング設定と一致させる必要があります。
+-- multiline=true:: 出力時に、メッセージ(Exchange)のHeader, properties, bodyなどはそれぞれ改行して出力します。
+-- showAll=true:: メッセージ(Exchange)全体を出力します。
+-- showStreams=true:: メッセージBodyがStream型の場合でも文字列として読み込んで出力します。
+-- skipBodyLineSeparator=false:: メッセージBodyに含まれる改行はそのまま出力します。
+
+[WARNING]
+showStreams=trueのオプションを指定した場合、メッセージBodyのStreamが一度読み込んだ後、後続処理が再度読み込めなくなります。その為、route要素にてstreamCacheを有効化する必要があります。 +
+　例: `<route id="..." streamCache="true">``
+
+
+サンプルCamelルートのデプロイは以下のコマンドを実行してください。
+```sh
+features:install camel-jackson
+features:install camel-jetty
+osgi:install -s mvn:com.sample/camel-logging-sample/1.0.0
+```
+
+
+== Step 2: Fuseロギングの設定変更
+
+Fuseのロギング設定にてStep1で指定したカスタムロガー(例: `rest-request-audit`)のカスタマイズします。また、変更の反映するには、Fuse再起動が必要です。
+
+    設定ファイル: fuse/etc/org.ops4j.pax.logging.cfg
+
+追加内容:
+
+1. カスタムロガーの定義
+2. ルートロガーからカスタムロガーの2重出力を除外(log4j.additivity...=false)
+3. カスタムロガーのレイアウト(...layout=...log4j.SanitizingPatternLayout)
+4. マスキング為のマッチングパターン(...layout.replaceRegex=[0-9]{4}-[0-9]{2}-[0-9]{2})
+5. マスキング後の置換文字(...layout.replacement=__MASKED_DATE__)
+6. その他(出力先、ローテーションなど)
+
+```properties
+########################################
+#
+# define rest-request-audit logger
+log4j.logger.rest-request-audit=INFO, rest-request-audit
+# prevent rest-request-audit logger output to rootLogger
+log4j.additivity.rest-request-audit=false
+
+# rest-request-audit appender
+log4j.appender.rest-request-audit=org.apache.log4j.RollingFileAppender
+log4j.appender.rest-request-audit.layout=org.apache.log4j.SanitizingPatternLayout
+log4j.appender.rest-request-audit.layout.replaceRegex=[0-9]{4}-[0-9]{2}-[0-9]{2}
+log4j.appender.rest-request-audit.layout.replacement=__MASKED_DATE__
+log4j.appender.rest-request-audit.layout.ConversionPattern=%d{ABSOLUTE} | %-5.5p | %-16.16t | %-32.32c{1} | %X{bundle.id} - %X{bundle.name} - %X{bundle.version} | %m%n
+log4j.appender.rest-request-audit.file=${karaf.data}/log/rest-request-audit.log
+log4j.appender.rest-request-audit.append=true
+log4j.appender.rest-request-audit.maxFileSize=10MB
+log4j.appender.rest-request-audit.maxBackupIndex=10
+#
+########################################
+```
+
+上記の例では、"yyyy-mm-dd"の日付情報を一律に `__MASKED_DATE__` へ置換するように設定します。
+
+== マスキング付きロギングの出力例
+
+サンプルリクエストを発行します。
+```sh
+$ cd camel-logging-sample
+$ curl -d @request.json -H 'Content-Type:application/json' http://localhost:9002/rest/camel-logging-sample
+>>> {"code":"Accepted"}
+```
+
+
+マスキング後の結果は以下に示します。
+`log/rest-request-audit.log` には、 +
+`<incidentDate>` 要素がマスキングされていることが分かります。
+
+```text
+15:11:07,283 | INFO  | tp1330437722-200 | rest-request-audit               | 232 - org.apache.camel.camel-core - 2.17.0.redhat-630283 | Exchange[
+, Id: ID-JFENG-MP-51489-1505452757438-3-4
+, ExchangePattern: InOut
+, Properties: {CamelCharsetName=UTF-8, CamelCreatedTimestamp=Fri Sep 15 15:11:07 JST 2017, CamelMessageHistory=[DefaultMessageHistory[routeId=route4, node=restBinding4], DefaultMessageHistory[routeId=route4, node=route4], DefaultMessageHistory[routeId=route_businesslogic, node=rest-request-audit]], CamelToEndpoint=log://rest-request-audit?multiline=true&showAll=true&showStreams=true&skipBodyLineSeparator=false}
+, Headers: {Accept=*/*, breadcrumbId=ID-JFENG-MP-51489-1505452757438-3-5, CamelHttpCharacterEncoding=UTF-8, CamelHttpMethod=POST, CamelHttpPath=, CamelHttpQuery=null, CamelHttpServletRequest=Request(POST /rest/camel-logging-sample)@21891042, CamelHttpServletResponse=HTTP/1.1 200
+
+, CamelHttpUri=/rest/camel-logging-sample, CamelHttpUrl=http://localhost:9002/rest/camel-logging-sample, CamelServletContextPath=/rest/camel-logging-sample, Content-Length=189, Content-Type=application/json, Host=localhost:9002, User-Agent=curl/7.54.0}
+, BodyType: com.sample.reportincident.InputReportIncident
+, Body: <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ns2:inputReportIncident xmlns:ns2="http://reportincident.example.camel.apache.org">
+    <incidentId>111</incidentId>
+    <incidentDate>__MASKED_DATE__</incidentDate>
+    <givenName>Christian</givenName>
+    <familyName>Mueller</familyName>
+    <email>chris@sample.com</email>
+</ns2:inputReportIncident>
+
+, Out: null:
+]
+```
